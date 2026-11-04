@@ -1,0 +1,121 @@
+-- =====================================================================
+-- 00 - Qualidade de dados
+-- =====================================================================
+
+SELECT
+    'orders_periodo'                                          AS k
+    , MIN(order_purchase_timestamp)::STRING
+        || ' a '
+        || MAX(order_purchase_timestamp)::STRING              AS v
+FROM FIAP.HOMOLOG_DATA.ORDERS
+
+UNION ALL
+
+SELECT
+    'orders_dup'                                              AS k
+    , (COUNT(*) - COUNT(DISTINCT order_id))::STRING           AS v
+FROM FIAP.HOMOLOG_DATA.ORDERS
+
+UNION ALL
+
+SELECT
+    'delivered_sem_data_entrega'                              AS k
+    , COUNT(*)::STRING                                        AS v
+FROM FIAP.HOMOLOG_DATA.ORDERS
+WHERE order_status = 'delivered'
+    AND order_delivered_customer_date IS NULL
+
+UNION ALL
+
+SELECT
+    'items_orfaos'                                            AS k
+    , COUNT(*)::STRING                                        AS v
+FROM FIAP.HOMOLOG_DATA.ORDER_ITEMS i
+LEFT JOIN FIAP.HOMOLOG_DATA.ORDERS o
+    USING (order_id)
+WHERE o.order_id IS NULL
+
+UNION ALL
+
+SELECT
+    'produtos_sem_categoria'                                  AS k
+    , COUNT(*)::STRING                                        AS v
+FROM FIAP.HOMOLOG_DATA.PRODUCTS
+WHERE product_category_name IS NULL
+
+UNION ALL
+
+SELECT
+    'categorias_sem_traducao'                                 AS k
+    , COUNT(DISTINCT p.product_category_name)::STRING         AS v
+FROM FIAP.HOMOLOG_DATA.PRODUCTS p
+LEFT JOIN FIAP.HOMOLOG_DATA.CATEGORY_TRANSLATION t
+    ON t.c1 = p.product_category_name
+WHERE p.product_category_name IS NOT NULL
+    AND t.c1 IS NULL
+
+UNION ALL
+
+SELECT
+    'reviews_dup_review_id'                                   AS k
+    , (COUNT(*) - COUNT(DISTINCT review_id))::STRING          AS v
+FROM FIAP.HOMOLOG_DATA.ORDER_REVIEWS
+
+UNION ALL
+
+SELECT
+    'pedidos_sem_pagamento'                                   AS k
+    , COUNT(*)::STRING                                        AS v
+FROM FIAP.HOMOLOG_DATA.ORDERS o
+LEFT JOIN (
+    SELECT DISTINCT
+        order_id
+    FROM FIAP.HOMOLOG_DATA.PAYMENTS
+) p
+    USING (order_id)
+WHERE p.order_id IS NULL
+
+UNION ALL
+
+SELECT
+    'diff_pagto_vs_itens_>1real'                              AS k
+    , COUNT(*)::STRING                                        AS v
+FROM (
+    SELECT
+        order_id
+        , SUM(price + freight_value) AS it
+    FROM FIAP.HOMOLOG_DATA.ORDER_ITEMS
+    GROUP BY 1
+) i
+JOIN (
+    SELECT
+        order_id
+        , SUM(payment_value) AS pg
+    FROM FIAP.HOMOLOG_DATA.PAYMENTS
+    GROUP BY 1
+) p
+    USING (order_id)
+WHERE ABS(it - pg) > 1
+
+UNION ALL
+
+SELECT
+    'geo_dup_zip'                                             AS k
+    , (COUNT(*) - COUNT(DISTINCT geolocation_zip_code_prefix))::STRING AS v
+FROM FIAP.HOMOLOG_DATA.GEOLOCATION
+
+UNION ALL
+
+SELECT
+    'translation_header_row'                                  AS k
+    , COUNT(*)::STRING                                        AS v
+FROM FIAP.HOMOLOG_DATA.CATEGORY_TRANSLATION
+WHERE c1 ILIKE 'product_category_name%'
+
+UNION ALL
+
+SELECT
+    'status_' || order_status                                 AS k
+    , COUNT(*)::STRING                                        AS v
+FROM FIAP.HOMOLOG_DATA.ORDERS
+GROUP BY order_status;
